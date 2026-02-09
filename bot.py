@@ -12,8 +12,12 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 # --- НАЛАШТУВАННЯ ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-ADMIN_ID = 123456789  # <--- ВСТАВ СВІЙ ID!
-ALLOWED_USERS = [ADMIN_ID]
+ADMIN_ID = 772888828  # <--- ВСТАВ СВІЙ ID!
+ALLOWED_USERS = [
+    ADMIN_ID,    # Це ти (автоматично підтягнеться згори)
+    433557714,  # <--- Заміни на ID першого друга (лиши коми в кінці)
+    675199057,  # <--- Заміни на ID другого друга
+]
 
 # ТВОЇ БОТИ
 MY_BOTS = {
