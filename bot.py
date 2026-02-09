@@ -2,25 +2,24 @@ import asyncio
 import logging
 import os
 import sys
-import requests
 from datetime import datetime
-import pytz # Для часових поясів
+import pytz 
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from aiohttp import web
+from aiohttp import web, ClientSession # <-- Асинхронний клієнт
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 # --- НАЛАШТУВАННЯ ---
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-ADMIN_ID = 123456789  # <--- ТВІЙ ID (Залиш той, що був)
+ADMIN_ID = 123456789  # <--- ВСТАВ СВІЙ ID!
 ALLOWED_USERS = [ADMIN_ID]
 
 # ТВОЇ БОТИ
 MY_BOTS = {
     "🧸 KidsLand": "https://kidsland-xxxx.onrender.com",
     "🔮 Magic Bot": "https://magic-xxxx.onrender.com",
-    "💸 Hesh & Cash": "https://hesh-xxxx.onrender.com", # Перевір, щоб тут було правильне посилання!
+    "💸 Hesh & Cash": "https://hesh-xxxx.onrender.com", 
     "💻 Data Nata": "https://data-nata-xxxx.onrender.com",
 }
 
@@ -30,6 +29,7 @@ if not BOT_TOKEN:
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 scheduler = AsyncIOScheduler()
+kyiv_tz = pytz.timezone('Europe/Kiev') # Фіксуємо Київський час
 
 # --- КЛАВІАТУРА ---
 def get_keyboard():
@@ -38,44 +38,62 @@ def get_keyboard():
         safe_code = name.split(" ")[1] if " " in name else name
         builder.row(types.InlineKeyboardButton(text=f"🟢 Розбудити {name}", callback_data=f"wake_{safe_code}"))
     builder.row(types.InlineKeyboardButton(text=f"🚀 Розбудити ВСІХ", callback_data=f"wake_all"))
+    builder.row(types.InlineKeyboardButton(text=f"🕒 Перевірити час", callback_data=f"check_time"))
     return builder.as_markup()
 
-# --- 1. ЗАГАЛЬНИЙ РАНКОВИЙ ОБХІД (ВСІХ) ---
+# --- ФУНКЦІЯ: АСИНХРОННИЙ "СТУК" ---
+async def ping_url(url, session):
+    try:
+        async with session.get(url, timeout=10) as response:
+            return response.status == 200
+    except Exception as e:
+        print(f"⚠️ Помилка пінгу {url}: {e}")
+        return False
+
+# --- 1. ЗАГАЛЬНИЙ РАНКОВИЙ ОБХІД ---
 async def morning_routine():
+    print(f"⏰ ПОЧАТОК РАНКОВОГО ОБХОДУ: {datetime.now(kyiv_tz)}")
     try:
         await bot.send_message(ADMIN_ID, "☕️ <b>Доброго ранку!</b> Починаю будити команду...", parse_mode="HTML")
     except: pass
 
     results = []
-    for name, url in MY_BOTS.items():
-        try:
-            requests.get(url, timeout=2)
-            results.append(f"✅ {name}")
-        except:
-            results.append(f"⚠️ {name} (помилка)")
-        await asyncio.sleep(5) # Пауза, щоб не перевантажити сервер
+    async with ClientSession() as session:
+        for name, url in MY_BOTS.items():
+            success = await ping_url(url, session)
+            status = "✅ Прокинувся" if success else "⚠️ Не відповів"
+            results.append(f"{name}: {status}")
+            await asyncio.sleep(5) # Пауза між ботами
     
+    report = "\n".join(results)
     try:
-        await bot.send_message(ADMIN_ID, f"📋 <b>Ранковий звіт:</b>\n\n" + "\n".join(results), parse_mode="HTML")
+        await bot.send_message(ADMIN_ID, f"📋 <b>Звіт:</b>\n\n{report}", parse_mode="HTML")
     except: pass
 
-# --- 2. СПЕЦІАЛЬНИЙ БУДИЛЬНИК ДЛЯ HESH & CASH ---
+# --- 2. СПЕЦІАЛЬНИЙ БУДИЛЬНИК (HESH) ---
 async def wake_hesh_only():
-    # Шукаємо посилання саме на Хеша
-    hesh_url = MY_BOTS.get("💸 Hesh & Cash")
-    
-    if hesh_url:
-        try:
-            requests.get(hesh_url, timeout=5)
-            await bot.send_message(ADMIN_ID, "💸 <b>Hesh & Cash</b> розбуджений для додаткової роботи!", parse_mode="HTML")
-        except Exception as e:
-            print(f"Не вдалося розбудити Хеша: {e}")
+    print(f"⏰ БУДИМО ХЕША: {datetime.now(kyiv_tz)}")
+    url = MY_BOTS.get("💸 Hesh & Cash")
+    if url:
+        async with ClientSession() as session:
+            await ping_url(url, session)
+            try:
+                await bot.send_message(ADMIN_ID, "💸 Hesh & Cash отримав сигнал!", parse_mode="HTML")
+            except: pass
 
 # --- ОБРОБКА КОМАНД ---
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     if message.from_user.id in ALLOWED_USERS:
-        await message.answer("👋 Директор на посту.\n\n⏰ <b>Розклад:</b>\n08:55 - Всі боти\n13:48 - Hesh & Cash\n18:55 - Hesh & Cash", reply_markup=get_keyboard(), parse_mode="HTML")
+        await message.answer(
+            f"👋 Директор на посту.\nЧас сервера: {datetime.now(kyiv_tz).strftime('%H:%M')}", 
+            reply_markup=get_keyboard()
+        )
+
+@dp.callback_query(F.data == "check_time")
+async def check_time_btn(callback: types.CallbackQuery):
+    now = datetime.now(kyiv_tz).strftime('%H:%M:%S')
+    await callback.answer(f"Київський час: {now}", show_alert=True)
 
 @dp.callback_query(F.data == "wake_all")
 async def manual_wake_all(callback: types.CallbackQuery):
@@ -90,12 +108,15 @@ async def wake_single(callback: types.CallbackQuery):
         if code in name:
             target_url = url
             break
+    
     if target_url:
-        requests.get(target_url, timeout=2)
+        async with ClientSession() as session:
+            await ping_url(target_url, session)
         await callback.answer(f"Сигнал надіслано!", show_alert=False)
 
 # --- WEB SERVER ---
 async def handle(request): return web.Response(text="Manager is Awake")
+
 async def start_server():
     app = web.Application()
     app.router.add_get("/", handle)
@@ -109,20 +130,19 @@ async def main():
     logging.basicConfig(level=logging.INFO)
     await start_server()
     
-    # НАЛАШТУВАННЯ ЧАСУ
-    kyiv_tz = pytz.timezone('Europe/Kiev')
-    
-    # 1. Ранок (Всі боти) - 08:55
+    # ПЛАНУВАЛЬНИК
     scheduler.add_job(morning_routine, 'cron', hour=8, minute=55, timezone=kyiv_tz)
-    
-    # 2. Обід (Тільки Hesh) - 13:48
-    scheduler.add_job(wake_hesh_only, 'cron', hour=14, minute=40, timezone=kyiv_tz)
-
-    # 3. Вечір (Тільки Hesh) - 18:55
+    scheduler.add_job(wake_hesh_only, 'cron', hour=13, minute=48, timezone=kyiv_tz)
     scheduler.add_job(wake_hesh_only, 'cron', hour=18, minute=55, timezone=kyiv_tz)
     
     scheduler.start()
-    print("⏰ Всі будильники налаштовано!")
+    
+    # Виводимо в лог час запуску
+    print(f"✅ Бот запущено! Київський час: {datetime.now(kyiv_tz)}")
+    print("⏰ Розклад:")
+    print("- 08:55 (Всі)")
+    print("- 13:48 (Хеш)")
+    print("- 18:55 (Хеш)")
     
     await dp.start_polling(bot)
 
