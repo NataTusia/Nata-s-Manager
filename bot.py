@@ -21,10 +21,10 @@ ALLOWED_USERS = [
 
 # ТВОЇ БОТИ
 MY_BOTS = {
-    "🧸 KidsLand": "https://kidsland-xxxx.onrender.com",
-    "🔮 Magic Bot": "https://magic-xxxx.onrender.com",
-    "💸 Hesh & Cash": "https://hesh-xxxx.onrender.com", 
-    "💻 Data Nata": "https://data-nata-xxxx.onrender.com",
+    "🧸 KidsLand": "https://kidslend-ob1u.onrender.com",
+    "🔮 Magic Bot": "https://magikindeteil-1cv2.onrender.com",
+    "💸 Hesh & Cash": "https://haih-and-cash.onrender.com", 
+    "💻 Data Nata": "https://datanata-38o2.onrender.com",
 }
 
 if not BOT_TOKEN:
